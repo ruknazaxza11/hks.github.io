@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>เพิ่มโลโก้ลงรูปภาพ</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Prompt', 'Segoe UI', Tahoma, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #1e40af, #991b1b);
+            color: #fff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.98);
+            border-radius: 20px;
+            padding: 40px;
+            width: 100%;
+            max-width: 800px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+            text-align: center;
+            color: #1e40af;
+        }
+
+        h1 {
+            font-size: 2.2rem;
+            margin-bottom: 25px;
+            color: #991b1b;
+        }
+
+        .upload-area {
+            border: 3px dashed #1e40af;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: #f8fafc;
+        }
+
+        .upload-area:hover {
+            background: #e0e7ff;
+            border-color: #3b82f6;
+        }
+
+        .upload-area p {
+            font-size: 1.1rem;
+            color: #1e40af;
+        }
+
+        .position-section, .size-section {
+            margin: 20px 0;
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .position-section label, .size-section label {
+            font-size: 1rem;
+            color: #1e40af;
+            cursor: pointer;
+            padding: 8px 15px;
+            border-radius: 5px;
+            transition: background 0.3s;
+        }
+
+        .position-section label:hover, .size-section label:hover {
+            background: #e0e7ff;
+        }
+
+        .position-section input[type="radio"], .size-section input[type="radio"] {
+            margin-right: 5px;
+        }
+
+        button {
+            padding: 12px 30px;
+            margin: 15px 5px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            background: #991b1b;
+            color: #fff;
+            transition: all 0.3s ease;
+        }
+
+        button:hover {
+            background: #b91c1c;
+            transform: translateY(-2px);
+        }
+
+        button:disabled {
+            background: #d1d5db;
+            cursor: not-allowed;
+        }
+
+        #preview {
+            max-width: 100%;
+            margin-top: 25px;
+            border-radius: 12px;
+            display: none;
+            border: 1px solid #e5e7eb;
+        }
+
+        .error {
+            color: #991b1b;
+            font-size: 0.9rem;
+            margin-top: 10px;
+            display: none;
+        }
+
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #1e40af;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+            display: none;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>เพิ่มโลโก้ลงรูปภาพ</h1>
+        <div class="upload-area" id="uploadArea">
+            <p>คลิกเพื่ออัปโหลดรูปภาพ (สูงสุด 10MB)</p>
+            <input type="file" id="imageInput" accept="image/*" class="hidden">
+        </div>
+        <div class="position-section">
+            <label><input type="radio" name="position" value="top-left" checked> มุมบนซ้าย (มาตรฐาน)</label>
+            <label><input type="radio" name="position" value="top-right"> มุมบนขวา</label>
+            <label><input type="radio" name="position" value="bottom-left"> มุมล่างซ้าย</label>
+            <label><input type="radio" name="position" value="bottom-right"> มุมล่างขวา</label>
+        </div>
+        <div class="size-section">
+            <label><input type="radio" name="size" value="small"> เล็ก</label>
+            <label><input type="radio" name="size" value="medium" checked> กลาง (มาตรฐาน)</label>
+            <label><input type="radio" name="size" value="large"> ใหญ่</label>
+        </div>
+        <div class="loader" id="loader"></div>
+        <p id="error" class="error"></p>
+        <button id="downloadBtn" disabled>ดาวน์โหลดรูปภาพ</button>
+        <canvas id="canvas" class="hidden"></canvas>
+        <img id="preview" src="" alt="ตัวอย่างรูปภาพ">
+    </div>
+
+    <script>
+        const imageInput = document.getElementById('imageInput');
+        const uploadArea = document.getElementById('uploadArea');
+        const preview = document.getElementById('preview');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const loader = document.getElementById('loader');
+        const error = document.getElementById('error');
+        const positionInputs = document.querySelectorAll('input[name="position"]');
+        const sizeInputs = document.querySelectorAll('input[name="size"]');
+
+        // ใช้ Direct Link จาก Imgur
+        const logoUrl = 'https://i.imgur.com/jWKRd84.png';
+        let uploadedImage = null;
+        let logoImage = null;
+
+        // โหลดโลโก้ล่วงหน้า
+        function preloadLogo() {
+            logoImage = new Image();
+            logoImage.crossOrigin = "Anonymous";
+            logoImage.src = logoUrl;
+            logoImage.onload = () => {
+                console.log('โลโก้โหลดสำเร็จ');
+            };
+            logoImage.onerror = () => {
+                showError('ไม่สามารถโหลดโลโก้ได้ กรุณาตรวจสอบ URL หรือลองใหม่');
+            };
+        }
+
+        preloadLogo();
+
+        // คลิกพื้นที่อัปโหลด
+        uploadArea.addEventListener('click', () => imageInput.click());
+
+        // อัปโหลดรูปภาพ
+        imageInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            // ตรวจสอบขนาดไฟล์ (สูงสุด 10MB)
+            if (file.size > 10 * 1024 * 1024) {
+                showError('ไฟล์มีขนาดใหญ่เกิน 10MB กรุณาเลือกไฟล์ที่เล็กกว่า');
+                return;
+            }
+
+            loader.style.display = 'block';
+            error.style.display = 'none';
+            downloadBtn.disabled = true;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                uploadedImage = new Image();
+                uploadedImage.src = event.target.result;
+                uploadedImage.onload = () => {
+                    loader.style.display = 'none';
+                    renderImageWithLogo();
+                };
+                uploadedImage.onerror = () => {
+                    showError('ไม่สามารถโหลดรูปภาพได้ กรุณาตรวจสอบไฟล์และลองใหม่');
+                    loader.style.display = 'none';
+                };
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // เมื่อเปลี่ยนตำแหน่งหรือขนาดโลโก้
+        positionInputs.forEach(input => {
+            input.addEventListener('change', () => {
+                if (uploadedImage) {
+                    renderImageWithLogo();
+                }
+            });
+        });
+
+        sizeInputs.forEach(input => {
+            input.addEventListener('change', () => {
+                if (uploadedImage) {
+                    renderImageWithLogo();
+                }
+            });
+        });
+
+        // แสดงข้อผิดพลาด
+        function showError(message) {
+            error.textContent = message;
+            error.style.display = 'block';
+        }
+
+        // วาดภาพและโลโก้ลง Canvas
+        function renderImageWithLogo() {
+            if (!uploadedImage || !logoImage) {
+                showError('กรุณาอัปโหลดรูปภาพและตรวจสอบว่าโลโก้พร้อมใช้งาน');
+                return;
+            }
+
+            canvas.width = uploadedImage.width;
+            canvas.height = uploadedImage.height;
+            ctx.drawImage(uploadedImage, 0, 0);
+
+            const shorterSide = Math.min(uploadedImage.width, uploadedImage.height);
+            const size = document.querySelector('input[name="size"]:checked').value;
+            let scale;
+            if (size === 'small') scale = 0.15;
+            else if (size === 'medium') scale = 0.25;
+            else scale = 0.35;
+
+            const logoWidth = shorterSide * scale;
+            const logoHeight = (logoWidth / logoImage.width) * logoImage.height;
+            const padding = 38; // 1 ซม. ≈ 38 พิกเซล
+
+            let x, y;
+            const position = document.querySelector('input[name="position"]:checked').value;
+            if (position === 'top-left') {
+                x = padding;
+                y = padding;
+            } else if (position === 'top-right') {
+                x = canvas.width - logoWidth - padding;
+                y = padding;
+            } else if (position === 'bottom-left') {
+                x = padding;
+                y = canvas.height - logoHeight - padding;
+            } else {
+                x = canvas.width - logoWidth - padding;
+                y = canvas.height - logoHeight - padding;
+            }
+
+            ctx.drawImage(logoImage, x, y, logoWidth, logoHeight);
+
+            // อัพเดตพรีวิว
+            preview.src = canvas.toDataURL('image/png');
+            preview.style.display = 'block';
+            downloadBtn.disabled = false;
+        }
+
+        // ดาวน์โหลดภาพ
+        downloadBtn.addEventListener('click', () => {
+            if (!uploadedImage || !logoImage) {
+                showError('กรุณาอัปโหลดรูปภาพและตรวจสอบว่าโลโก้พร้อมใช้งาน');
+                return;
+            }
+            const link = document.createElement('a');
+            link.href = canvas.toDataURL('image/png');
+            link.download = 'image_with_logo.png';
+            link.click();
+        });
+    </script>
+</body>
+</html>
